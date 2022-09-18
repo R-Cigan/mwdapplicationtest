@@ -61,7 +61,8 @@ class Mwdapplicationtest extends Module
     {
         return parent::install() &&
             $this->registerHook('header') &&
-            $this->registerHook('backOfficeHeader');
+            $this->registerHook('backOfficeHeader') &&
+			$this->registerHook('actionOrderStatusPostUpdate');
     }
 
     public function uninstall()
@@ -107,4 +108,41 @@ class Mwdapplicationtest extends Module
         $this->context->controller->addJS($this->_path.'/views/js/front.js');
         $this->context->controller->addCSS($this->_path.'/views/css/front.css');
     }
+	
+	/**
+	 * Perform custom action after the order status has been updated - but before it is changed in the DB
+	 */
+	public function hookActionOrderStatusPostUpdate($params) {
+		// check if the new order status id matches with the enviroment constant for "sent" status
+		if($params['newOrderStatus']->id === intval(Configuration::get('PS_OS_SHIPPING'))) {
+		// if($params['newOrderStatus']->id === 4) {
+			// get order reference from the $params variable
+			$order_reference = $params['id_order'];
+			
+			// generate and save log message with severity level 1
+			$message_sent = "Die Bestellung ".$order_reference." wurde versendet";
+			PrestaShopLogger::addLog($message_sent, $severity = 1, $error_code = null, $object_type = null, $object_id = null, $allow_duplicate = false, $id_employee = null);
+			
+			// fetch the "Order" object with the corresponding id
+			$order = new Order((int)$params['id_order']);
+			// get all products for the current order
+			// getProducts($products = false, $selected_products = false, $selected_qty = false, $fullInfos = true)
+			// selected_products, selected_qty need to be set to "true" and fullInfos to "false" so we can focus on the quantity
+			$products = $order->getProducts(false, true, true, false);
+			// other option to get the quantity of products in a order - we could also qeuery the DB directly for the specific order
+			// $products = OrderDetail::getList((int)$params['id_order']);
+			
+			// simple sum of product quantity
+			$total_product_quantity = 0;
+			foreach ($products as $product) {
+				$total_product_quantity += $product['product_quantity'];
+			}
+			
+			if ($total_product_quantity > 3) {
+				// generate and save log message with severity level 2
+				$message_quantity = "Die Bestellung ".$order_reference." beinhaltet mehr als 3 Artikel";
+				PrestaShopLogger::addLog($message_quantity, $severity = 2, $error_code = null, $object_type = null, $object_id = null, $allow_duplicate = false, $id_employee = null);
+			}
+		}
+	}
 }
